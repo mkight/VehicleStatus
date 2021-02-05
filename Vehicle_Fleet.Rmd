@@ -1,0 +1,43 @@
+---
+title: "Vehicle_Fleet"
+output: 
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE
+	)
+```
+
+# Load in Required Libraries
+
+```{r}
+library(tidyverse)
+library(RODBC)
+library(here)
+```
+
+The data is stored in a Microsoft Access File, so the following command is required to import the data into R.Assign the data to data frame Vehicles_DB. 
+
+```{r}
+Vehicle_DB <- odbcConnectAccess2007('VehicleFleetStatus.accdb')
+```
+
+This will import all tables within the database, user must call the desired table name using SqlFetch(). If there is only one table, the SqlFetch command can be implemented directly. If there are multiple tables or unknown table names, use SqlTable() combined with the TableType command.
+
+```{r}
+tbl <- sqlTables(Vehicle_DB, tableType = 'TABLE' )
+tbl <- tbl$TABLE_NAME
+Fleet_Status <- sqlFetch(Vehicle_DB, tbl)
+```
+
+
+```{r}
+dodge <- filter(Fleet_Status, Vehicle == "Dodge")
+
+```
