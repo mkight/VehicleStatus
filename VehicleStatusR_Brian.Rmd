@@ -1,0 +1,378 @@
+---
+title: "Vehicle Status"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+***Import Data***
+```{r}
+#Utilize RODBC Package to read in data from MS Access to R
+library(RODBC)
+library(ggplot2)
+library(scales)
+
+#Obtain file path to assign to database
+VehicleDB <- odbcConnectAccess2007("C:/Users/J305861/Desktop/R Programming/Vehicle Status/VehicleFleetStatus.accdb")
+
+#Select the table 'FleetStatus' in original Access file
+FleetStatus <- sqlFetch(VehicleDB, "FleetStatus")
+
+
+start_date_list <- as.Date(as.character(FleetStatus[,4]), format = "%Y-%m-%d")
+FleetStatus$`Start Date` <- start_date_list
+end_date_list <- as.Date(as.character(FleetStatus[,5]), format = "%Y-%m-%d")
+FleetStatus$`End Date` <- end_date_list
+
+FleetStatus
+
+```
+
+
+***Select dates from which to draw data***
+```{r}
+
+# start <- readline(prompt="Enter Start Date (E.g. 2020-01-31): ")
+# end <- readline(prompt="Enter End Date (E.g. 2020-01-31): ")
+# 
+# start <- as.Date(start, format = "%Y-%m-%d")
+# end <- as.Date(end, format = "%Y-%m-%d")
+# start
+# end
+
+start <- as.Date(as.character("2020-01-01"), format = "%Y-%m-%d")
+end <- as.Date(as.character("2020-12-31"), format = "%Y-%m-%d")
+
+start
+end
+
+```
+
+
+***Select Vehicles from which to draw data***
+```{r}
+
+Vehicle_Type <- readline(prompt="Enter Vehicle (E.g. Dodge, Ford, Toyota, Chevy, All Vehicles): ")
+
+NewFleetStatus <- switch(Vehicle_Type,
+                         "Dodge"= {FleetStatus[FleetStatus$Vehicle == "Dodge", ]},
+                         "Ford"= {FleetStatus[FleetStatus$Vehicle == "Ford", ]},
+                         "Toyota"= {FleetStatus[FleetStatus$Vehicle == "Toyota", ]},
+                         "Chevy"= {FleetStatus[FleetStatus$Vehicle == "Chevy", ]},
+                         "All Vehicles"= {FleetStatus})
+
+NewFleetStatus <- NewFleetStatus[order(NewFleetStatus$`Start Date`),]
+
+NewFleetStatus
+
+```
+
+
+```{r}
+
+NumStatus <- nrow(NewFleetStatus)
+NumDays <- seq(start, end, by="days")
+NumDays <- days[!grepl(x = days, pattern = "-02-29$")]
+  
+newMatrix <- matrix(nrow = NumStatus, ncol = length(NumDays))
+
+for(row in 1:NumStatus){
+  
+  for(col in 1:length(NumDays)){
+    
+    if(NumDays[col] >= NewFleetStatus$`Start Date`[row] && NumDays[col] <= NewFleetStatus$`End Date`[row])
+    {
+      newMatrix[row,col] = NewFleetStatus$Status[row]
+    }
+    
+    else
+    {
+      newMatrix[row,col] = ""
+    }
+  }
+}
+
+```
+
+
+```{r}
+
+lablist.y <- as.vector(c("Status",NewFleetStatus$Status))
+count <- 1
+
+par(yaxt="n", lend=2)
+plot(NumDays, rep(0,length(NumDays)), type = "l", ylim=c(0,NumStatus), xlab="Dates", ylab="Maintenance Actions")
+
+for(row in 1:NumStatus){
+  
+  total <- 0 
+  
+  newLengths <- rle(newMatrix[row,])$lengths
+  newValues <- rle(newMatrix[row,])$values
+  
+  for(steps in 1:length(newLengths)){
+    
+    if(newValues[steps] == "")
+    {
+      total = total + newLengths[steps]
+    }
+    
+    else
+    {
+      #print(newMatrix[row,((total+1):(total+newLengths[steps]))])
+      
+      lines(NumDays[(total+1):(total+newLengths[steps])],rep(count,newLengths[steps]), type = "l", col= newValues[steps],lwd=7)
+      text(NumDays[(total+newLengths[steps])], count, NewFleetStatus$Name[row], pos = 4, cex = .8)
+      
+      count = count + 1
+      total = total + newLengths[steps]
+    }
+    
+  }
+  
+}
+
+axis(2, at=seq(0, NumStatus, by=1), labels = FALSE)
+text(y = seq(0, NumStatus, by=1), par("usr")[1], labels = lablist.y, srt = 45, pos = 2, xpd = TRUE)
+
+
+```
+
+
+
+```{r}
+
+OverallStatusArray <- vector()
+IndividualArray <- vector()
+
+theDate <- start
+
+while(theDate < end){
+  
+  
+  for(row in 1:nrow(NewFleetStatus)){
+      
+    while(theDate >= NewFleetStatus$`Start Date`[row] && theDate <= NewFleetStatus$`End Date`[row] && theDate < end){
+      
+      IndividualStatus = NewFleetStatus$Status[row]
+      IndividualArray = append(IndividualArray, IndividualStatus)
+      
+      OverallStatus =  NewFleetStatus$Status[row]
+      OverallStatusArray = append(OverallStatusArray, OverallStatus)
+
+      theDate <- theDate + 1
+    }
+  }
+  
+  if(length(OverallStatusArray) == (end-start)){
+    break
+  }
+  
+  IndividualStatus = "White"
+  IndividualArray = append(IndividualArray, IndividualStatus)
+  
+  OverallStatus = "Green"
+  OverallStatusArray = append(OverallStatusArray, OverallStatus)
+  
+  theDate <- theDate + 1
+}
+
+```
+
+
+```{r}
+
+days <- seq(start, end, by="days")
+days <- days[!grepl(x = days, pattern = "-02-29$")]
+
+dfDateStatus <- data.frame(dates = days, status = OverallStatusArray)
+
+dfDateIndividualStatus <- data.frame(dates = days, status = IndividualArray)
+
+# ggplot(dfDateStatus, aes(x=dates, y=status)) +
+#   geom_line(data = subset(dfDateStatus, status=="Green"), colour = "darkgreen", size = 2) + 
+#   geom_line(data = subset(dfDateStatus, status=="Yellow"), colour = "gold", size = 2) +
+#   geom_line(data = subset(dfDateStatus, status=="Red"), colour = "red4", size = 2) +
+#   #theme(panel.background = element_rect(fill = 'gray95', colour = 'black')) +
+#   xlab("Days") + ylab("Status")
+
+```
+
+#Hard code for figuring out individual status graph
+```{r}
+# lines(days[1:2], rep(1,2), type = "l", col="dark green", lwd=3)
+# lines(days[3:31], rep(2,29), type = "l", col = "gray", lwd=3)
+# lines(days[32:36], rep(3,5), type = "l", col = "red", lwd=3)
+# lines(days[37:60], rep(4,24), type = "l", col = "gray", lwd=3)
+# lines(days[61:62], rep(5,2), type = "l", col = "dark green", lwd=3)
+# lines(days[63:74], rep(6,12), type = "l", col = "gray", lwd=3)
+# lines(days[75:259], rep(7,185), type = "l", col = "gold", lwd=3)
+# lines(days[260:335], rep(8,76), type = "l", col = "gray", lwd=3)
+# lines(days[336:350], rep(9,15), type = "l", col = "gold", lwd=3)
+# lines(days[351:365], rep(10,15), type = "l", col = "gray", lwd=3)
+```
+
+
+
+```{r}
+# IndivRLE <- rle(IndividualArray)
+# 
+# Indlengths <- IndivRLE$lengths
+# Indvalues <- IndivRLE$values 
+# 
+# TrueStatusValues <- Indvalues[Indvalues != "White"]
+# 
+# lablist.y <- as.vector(c("Status",TrueStatusValues))
+# 
+# totaldays <- 0
+# count <- 1
+# 
+# par(yaxt="n", lend=2)
+# plot(days, rep(0,length(days)), type = "l", ylim=c(0,length(TrueStatusValues)), xlab="Dates", ylab="Status")
+# 
+# for(runs in 1:length(Indvalues)){
+#   
+#   if(Indvalues[runs] == "White")
+#   {
+#     totaldays = totaldays + Indlengths[runs] 
+#   }
+#   else
+#   {
+#    lines(days[(totaldays+1):(totaldays+Indlengths[runs])],rep(count,Indlengths[runs]), type = "l", col= Indvalues[runs],lwd=7)
+#     
+#     print(totaldays)
+#     
+#     count = count + 1
+#     totaldays = totaldays + Indlengths[runs]
+#   }
+#   
+# }
+# 
+# axis(2, at=seq(0, length(TrueStatusValues), by=1), labels = FALSE)
+# text(y = seq(0, length(TrueStatusValues), by=1), par("usr")[1], labels = lablist.y, srt = 45, pos = 2, xpd = TRUE)
+
+```
+
+
+#Hard code for figuring out overall status graph
+```{r}
+
+# rle(OverallStatusArray)
+# 
+# lablist.y <- as.vector(c("Status","Green", "Red", "Green", "Yellow", "Green", "Yellow", "Green"))
+# 
+# par(yaxt="n")
+# plot(days[1:365], rep(0,365), type = "l", ylim=c(0,7))
+# lines(days[1:31], rep(1,31), type = "l", col="dark green", lwd=3)
+# lines(days[32:36], rep(2,5), type = "l", col = "red", lwd=3)
+# lines(days[37:74], rep(3,38), type = "l", col = "dark green", lwd=3)
+# lines(days[75:259], rep(4,185), type = "l", col = "gold", lwd=3)
+# lines(days[260:335], rep(5,76), type = "l", col = "dark green", lwd=3)
+# lines(days[336:350], rep(6,15), type = "l", col = "gold", lwd=3)
+# lines(days[351:365], rep(7,15), type = "l", col = "dark green", lwd=3)
+# axis(2, at=seq(0, 7, by=1), labels = FALSE)
+# text(y = seq(0, 7, by=1), par("usr")[1], labels = lablist.y, srt = 45, pos = 2, xpd = TRUE)
+# #axis(2, at=1, labels="Refuel")
+
+```
+
+
+***Change this to a single plotted line for 'Overall Status'***
+```{r}
+# statuslengths <- rle(OverallStatusArray)$lengths
+# statusvalues <- rle(OverallStatusArray)$values
+# 
+# lablist.y <- as.vector(c("Status",statusvalues))
+# totaldays <- 0
+# 
+# par(yaxt="n", lend=2)
+# plot(days, rep(0,length(days)), type = "l", ylim=c(0,length(statuslengths)), xlab="Dates", ylab="Status")
+# 
+# for(runs in 1:length(statuslengths)){
+#     lines(days[(totaldays+1):(totaldays+statuslengths[runs])],rep(runs,statuslengths[runs]), type = "l", col= statusvalues[runs],lwd=7)
+# 
+#   totaldays = totaldays + statuslengths[runs]
+#   }
+# 
+# axis(2, at=seq(0, length(statusvalues), by=1), labels = FALSE)
+# text(y = seq(0, length(statusvalues), by=1), par("usr")[1], labels = lablist.y, srt = 45, pos = 2, xpd = TRUE)
+
+
+```
+
+
+```{r}
+# lablist.y <- as.vector(c("Status","Green", "Red", "Green", "Yellow", "Green", "Yellow", "Green"))
+# 
+# par(yaxt="n")
+# plot(days[1:365], rep(0,365), type = "l", ylim=c(0,7))
+# lines(days[1:31], rep(1,31), type = "l", col="dark green", lwd=3)
+# lines(days[32:36], rep(2,5), type = "l", col = "red", lwd=3)
+# lines(days[37:74], rep(3,38), type = "l", col = "dark green", lwd=3)
+# lines(days[75:259], rep(4,185), type = "l", col = "gold", lwd=3)
+# lines(days[260:335], rep(5,76), type = "l", col = "dark green", lwd=3)
+# lines(days[336:350], rep(6,15), type = "l", col = "gold", lwd=3)
+# lines(days[351:365], rep(7,15), type = "l", col = "dark green", lwd=3)
+# axis(2, at=seq(0, 7, by=1), labels = FALSE)
+# text(y = seq(0, 7, by=1), par("usr")[1], labels = lablist.y, srt = 45, pos = 2, xpd = TRUE)
+# #axis(2, at=1, labels="Refuel")
+
+```
+
+
+
+```{r}
+
+cat("Percentage of time Overall Status was Green: ", round(100*sum(OverallStatusArray == "Green")/length(OverallStatusArray),2), "%\n")
+
+cat("Percentage of time Overall Status was Yellow: ", round(100*sum(OverallStatusArray == "Yellow")/length(OverallStatusArray),2), "%\n")
+
+cat("Percentage of time Overall Status was Red: ", round(100*sum(OverallStatusArray == "Red")/length(OverallStatusArray),2),"%\n")
+
+
+```
+
+
+
+
+```{r}
+
+statuslengths <- rle(OverallStatusArray)$lengths
+statusvalues <- rle(OverallStatusArray)$values
+
+totaldays <- 0
+
+par(yaxt="n", lend=2)
+plot(days, rep(0,length(days)), type = "l", ylim=c(.8,1.2), xlab=paste("Dates From",start,"to",end), ylab="Overall Status", main = paste(Vehicle_Type, "Status During", start,"to", end))
+
+for(runs in 1:length(statuslengths)){
+    lines(days[(totaldays+1):(totaldays+statuslengths[runs])],rep(1,statuslengths[runs]), type = "l", col= statusvalues[runs],lwd=15)
+
+  totaldays = totaldays + statuslengths[runs]
+  }
+
+####Fix label issue below, its probably fine without it but may as well fix it######
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+

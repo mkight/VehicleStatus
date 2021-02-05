@@ -16,8 +16,8 @@ sapply(Fleet_Status, class)
 #Vehicle and Status are characters and must be converted to factors
 Fleet_Status$Vehicle <- as.factor(Fleet_Status$Vehicle)
 Fleet_Status$Status <- as.factor(Fleet_Status$Status)
-Fleet_Status$`Start Date` <- as.Date(Fleet_Status$`Start Date`)
-Fleet_Status$`End Date` <- as.Date(Fleet_Status$`End Date`)
+Fleet_Status$`Start Date` <- as.Date(Fleet_Status$`Start Date`, format="%Y-%m-%d")
+Fleet_Status$`End Date` <- as.Date(Fleet_Status$`End Date`, format="%Y-%m-%d")
 
 #Identify how many of each vehicle type/factor
 table(Fleet_Status$Vehicle)
@@ -35,12 +35,14 @@ dodge_tbl_red <- filter(dodge_tbl, Status == 'Red')
 dodge_tbl_yel <- filter(dodge_tbl, Status == 'Yellow')
 
 
+# Automate plots for each vehicle name
+Fleet_Status_AutoPlot %>% 
+  group_by(Vehicle) %>%
+  nest() %>%
+  mutate(plots = map2(.x = vehicle,
+                      .y = data,
+                      ~make_plot(dataset = .y, var = .x)))
 
-
-
-#Plot 
-ggplot(data = dodge_tbl) +
-  geom_tile(aes())
 
 
 

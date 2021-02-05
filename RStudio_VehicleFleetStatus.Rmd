@@ -1,0 +1,95 @@
+---
+title: "RStudio_VehicleFleetStatus"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+options(knitr.table.format = "html")
+library(tidyverse)
+library(purrr)
+library(ggplot2)
+library(dplyr)
+library(RODBC)
+library(kableExtra)
+library(lubridate)
+
+db <- "C:/Users/J305843/Documents/R_Projects/VehicleFleetStatus.accdb"
+con <- odbcConnectAccess2007(db)
+Fleet <- sqlFetch(con,"FleetStatus")
+```
+
+## Data Grabbing
+
+The code filters the access file to grab what we need and formats them based on the vehicle model
+
+For some of the plots, they need to be plotted with respect to time. It is needed to change the dates to obtainable values
+
+```{r modifications and stats}
+md1 <- Fleet %>%
+      select(ID,Vehicle,Status,"Start Date", "End Date")
+md1$Vehicle <- as.factor(md1$Vehicle)
+
+
+
+end_date <- as.Date(md1$`End Date`, format="%d-%m-%Y")
+start_date <- as.Date(md1$`Start Date`, format="%d-%m-%Y")
+
+md1 <- mutate(md1, num_days=end_date - start_date)
+
+md1 <- md1 %>% 
+        mutate_if(is.factor, as.character)
+
+Dodge <- md1 %>% filter(Vehicle == "Dodge")
+
+make_plot <- function(dataset, type){
+        ggplot(dataset)+
+        geom_segment(aes(x = `Start Date`, xend = `End Date`, y = Status, yend = Status, size=10, colour=Status))+
+        theme_minimal()+
+        scale_color_manual(values=c('dark green','red','yellow'))+
+        labs(y='Status of Vehicle', x='Time of Status', shape='Status Color')+
+        ggtitle(paste0(type," Status in 2020"))+
+        theme(plot.title=element_text(hjust=.5), panel.grid=element_line(color='black'),
+              panel.background=element_rect(fill='white'))
+  
+}
+
+
+
+```
+
+## Plots
+
+The first plot is a bar plot with the different tickets of each model
+
+```{r plotting, echo = TRUE}
+plt1 <- ggplot(md1, aes(Vehicle, fill=Status))+
+        geom_bar(color="black")+
+        theme_minimal()+
+        scale_fill_manual(values=c('green','red','yellow'))+
+        labs(y='Number of Vehicle with Status', x='Vehicle Model', shape='Status Color')+
+        ggtitle("Overall Vehicle Status")+
+        theme(plot.title=element_text(hjust=.5), panel.grid=element_line(color='black'),
+              panel.background=element_rect(fill='papayawhip'))
+
+print(plt1)
+
+vehicle_results <- md1 %>%
+  group_by(Vehicle) %>%
+  nest() %>%
+  mutate(plots = map2(.x = data,
+                      .y = Vehicle,
+                      ~make_plot(dataset = .x, type = .y)))
+
+plt2 <- ggplot(Dodge)+
+        geom_segment(aes(x = `Start Date`, xend = `End Date`, y = Status, yend = Status, size=10, colour=Status))+
+        theme_minimal()+
+        scale_color_manual(values=c('dark green','red','yellow'))+
+        labs(y='Status of Vehicle', x='Time of Status', shape='Status Color')+
+        ggtitle("Dodge Status in 2020")+
+        theme(plot.title=element_text(hjust=.5), panel.grid=element_line(color='black'),
+              panel.background=element_rect(fill='white'))
+        
+print(plt2)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
